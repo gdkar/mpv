@@ -25,9 +25,7 @@
 #include "audio/format.h"
 #include "audio/audio.h"
 #include "dec_audio.h"
-
 struct mp_decoder_list;
-
 /* interface of video decoder drivers */
 struct ad_functions {
     const char *name;
@@ -37,9 +35,7 @@ struct ad_functions {
     int (*control)(struct dec_audio *da, int cmd, void *arg);
     int (*decode_packet)(struct dec_audio *da, struct mp_audio **out);
 };
-
 enum ad_ctrl {
     ADCTRL_RESET = 1,   // flush and reset state, e.g. after seeking
 };
-
 #endif /* MPLAYER_AD_H */

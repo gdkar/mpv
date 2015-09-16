@@ -28,7 +28,6 @@
 struct mp_audio_buffer {
     struct mp_audio *buffer;
 };
-
 struct mp_audio_buffer *mp_audio_buffer_create(void *talloc_ctx)
 {
     struct mp_audio_buffer *ab = talloc(talloc_ctx, struct mp_audio_buffer);
@@ -37,7 +36,6 @@ struct mp_audio_buffer *mp_audio_buffer_create(void *talloc_ctx)
     };
     return ab;
 }
-
 // Reinitialize the buffer, set a new format, drop old data.
 // The audio data in fmt is not used, only the format.
 void mp_audio_buffer_reinit(struct mp_audio_buffer *ab, struct mp_audio *fmt)
@@ -46,7 +44,6 @@ void mp_audio_buffer_reinit(struct mp_audio_buffer *ab, struct mp_audio *fmt)
     mp_audio_realloc(ab->buffer, 1);
     ab->buffer->samples = 0;
 }
-
 void mp_audio_buffer_reinit_fmt(struct mp_audio_buffer *ab, int format,
                                 const struct mp_chmap *channels, int srate)
 {
@@ -56,7 +53,6 @@ void mp_audio_buffer_reinit_fmt(struct mp_audio_buffer *ab, int format,
     mpa.rate = srate;
     mp_audio_buffer_reinit(ab, &mpa);
 }
-
 void mp_audio_buffer_get_format(struct mp_audio_buffer *ab,
                                 struct mp_audio *out_fmt)
 {

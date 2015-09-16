@@ -41,7 +41,6 @@ struct mpv_global;
 
 // Flags for af->filter()
 #define AF_FILTER_FLAG_EOF 1
-
 /* Audio filter information not specific for current instance, but for
    a specific filter */
 struct af_info {
@@ -53,7 +52,6 @@ struct af_info {
     const void *priv_defaults;
     const struct m_option *options;
 };
-
 // Linked list of audio filters
 struct af_instance {
     const struct af_info *info;
@@ -70,26 +68,21 @@ struct af_instance {
     int (*filter_out)(struct af_instance *af);
     void *priv;
     struct mp_audio *data; // configuration and buffer for outgoing data stream
-
     struct af_instance *next;
     struct af_instance *prev;
     double delay; /* Delay caused by the filter, in seconds of audio consumed
                    * without corresponding output */
     bool auto_inserted; // inserted by af.c, such as conversion filters
     char *label;
-
     struct mp_audio fmt_in, fmt_out;
-
     struct mp_audio **out_queued;
     int num_out_queued;
-
     struct mp_audio_pool *out_pool;
 };
 
 // Current audio stream
 struct af_stream {
     int initialized; // 0: no, 1: yes, -1: attempted to, but failed
-
     // The first and last filter in the list
     struct af_instance *first;
     struct af_instance *last;
@@ -98,7 +91,6 @@ struct af_stream {
     struct mp_audio input;
     struct mp_audio output;
     struct mp_audio filter_output;
-
     struct mp_log *log;
     struct MPOpts *opts;
     struct replaygain_data *replaygain_data;
@@ -140,8 +132,7 @@ struct af_stream *af_new(struct mpv_global *global);
 void af_destroy(struct af_stream *s);
 int af_init(struct af_stream *s);
 void af_uninit(struct af_stream *s);
-struct af_instance *af_add(struct af_stream *s, char *name, char *label,
-                           char **args);
+struct af_instance *af_add(struct af_stream *s, char *name, char *label,char **args);
 int af_remove_by_label(struct af_stream *s, char *label);
 struct af_instance *af_find_by_label(struct af_stream *s, char *label);
 struct af_instance *af_control_any_rev(struct af_stream *s, int cmd, void *arg);
@@ -154,14 +145,9 @@ int af_filter_frame(struct af_stream *s, struct mp_audio *frame);
 int af_output_frame(struct af_stream *s, bool eof);
 struct mp_audio *af_read_output_frame(struct af_stream *s);
 int af_make_writeable(struct af_instance *af, struct mp_audio *frame);
-
 double af_calc_delay(struct af_stream *s);
-
 int af_test_output(struct af_instance *af, struct mp_audio *out);
-
 int af_from_ms(int n, float *in, int *out, int rate, float mi, float ma);
 float af_softclip(float a);
-
 bool af_lavrresample_test_conversion(int src_format, int dst_format);
-
 #endif /* MPLAYER_AF_H */

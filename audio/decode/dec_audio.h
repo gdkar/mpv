@@ -25,7 +25,6 @@
 
 struct mp_audio_buffer;
 struct mp_decoder_list;
-
 struct dec_audio {
     struct mp_log *log;
     struct MPOpts *opts;
@@ -48,7 +47,6 @@ struct dec_audio {
     // For free use by the ad_driver
     void *priv;
 };
-
 enum {
     AD_OK = 0,
     AD_ERR = -1,
@@ -56,13 +54,10 @@ enum {
     AD_NEW_FMT = -3,
     AD_WAIT = -4,
 };
-
 struct mp_decoder_list *audio_decoder_list(void);
 int audio_init_best_codec(struct dec_audio *d_audio);
-int audio_decode(struct dec_audio *d_audio, struct mp_audio_buffer *outbuf,
-                 int minsamples);
+int audio_decode(struct dec_audio *d_audio, struct mp_audio_buffer *outbuf,int minsamples);
 int initial_audio_decode(struct dec_audio *d_audio);
 void audio_reset_decoding(struct dec_audio *d_audio);
 void audio_uninit(struct dec_audio *d_audio);
-
 #endif /* MPLAYER_DEC_AUDIO_H */

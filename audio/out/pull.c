@@ -45,35 +45,31 @@ enum {
     AO_STATE_PLAY,  // play the buffer
     AO_STATE_BUSY,  // like AO_STATE_PLAY, but ao_read_data() is being called
 };
-
 #define IS_PLAYING(st) ((st) == AO_STATE_PLAY || (st) == AO_STATE_BUSY)
-
 struct ao_pull_state {
     // Be very careful with the order when accessing planes.
     struct mp_ring *buffers[MP_NUM_CHANNELS];
-
     // AO_STATE_*
     atomic_int state;
-
     // Device delay of the last written sample, in realtime.
     atomic_llong end_time_us;
 };
-
 static void set_state(struct ao *ao, int new_state)
 {
     struct ao_pull_state *p = ao->api_priv;
+    int old = atomic_load(&p->state);
     while (1) {
-        int old = atomic_load(&p->state);
+        if (old == new_state) break;
         if (old == AO_STATE_BUSY) {
             // A spinlock, because some audio APIs don't want us to use mutexes.
             mp_sleep_us(1);
+            old = atomic_load(&p->state);
             continue;
         }
         if (atomic_compare_exchange_strong(&p->state, &old, new_state))
             break;
     }
 }
-
 static int get_space(struct ao *ao)
 {
     struct ao_pull_state *p = ao->api_priv;
@@ -81,14 +77,11 @@ static int get_space(struct ao *ao)
     // minimum free space across all planes.
     return mp_ring_available(p->buffers[ao->num_planes - 1]) / ao->sstride;
 }
-
 static int play(struct ao *ao, void **data, int samples, int flags)
 {
     struct ao_pull_state *p = ao->api_priv;
-
     int write_samples = get_space(ao);
     write_samples = MPMIN(write_samples, samples);
-
     // Write starting from the last plane - this way, the first plane will
     // always contain the minimum amount of data readable across all planes
     // (assumes the reader starts with the first plane).
@@ -97,16 +90,13 @@ static int play(struct ao *ao, void **data, int samples, int flags)
         int r = mp_ring_write(p->buffers[n], data[n], write_bytes);
         assert(r == write_bytes);
     }
-
     int state = atomic_load(&p->state);
     if (!IS_PLAYING(state)) {
         set_state(ao, AO_STATE_PLAY);
         ao->driver->resume(ao);
     }
-
     return write_samples;
 }
-
 // Read the given amount of samples in the user-provided data buffer. Returns
 // the number of samples copied. If there is not enough data (buffer underrun
 // or EOF), return the number of samples that could be copied, and fill the
@@ -118,55 +108,38 @@ static int play(struct ao *ao, void **data, int samples, int flags)
 int ao_read_data(struct ao *ao, void **data, int samples, int64_t out_time_us)
 {
     assert(ao->api == &ao_api_pull);
-
     struct ao_pull_state *p = ao->api_priv;
     int full_bytes = samples * ao->sstride;
     bool need_wakeup = false;
     int bytes = 0;
-
     // Play silence in states other than AO_STATE_PLAY.
-    if (!atomic_compare_exchange_strong(&p->state, &(int){AO_STATE_PLAY},
-                                        AO_STATE_BUSY))
+    if (!atomic_compare_exchange_strong(&p->state, &(int){AO_STATE_PLAY},AO_STATE_BUSY))
         goto end;
-
     // Since the writer will write the first plane last, its buffered amount
     // of data is the minimum amount across all planes.
     int buffered_bytes = mp_ring_buffered(p->buffers[0]);
     bytes = MPMIN(buffered_bytes, full_bytes);
-
-    if (bytes > 0)
-        atomic_store(&p->end_time_us, out_time_us);
-
+    if (bytes > 0) atomic_store(&p->end_time_us, out_time_us);
     for (int n = 0; n < ao->num_planes; n++) {
         int r = mp_ring_read(p->buffers[n], data[n], bytes);
         bytes = MPMIN(bytes, r);
     }
-
     // Half of the buffer played -> request more.
     need_wakeup = buffered_bytes - bytes <= mp_ring_size(p->buffers[0]) / 2;
-
     // Should never fail.
     atomic_compare_exchange_strong(&p->state, &(int){AO_STATE_BUSY}, AO_STATE_PLAY);
-
 end:
-
-    if (need_wakeup)
-        mp_input_wakeup_nolock(ao->input_ctx);
-
+    if (need_wakeup) mp_input_wakeup_nolock(ao->input_ctx);
     // pad with silence (underflow/paused/eof)
     for (int n = 0; n < ao->num_planes; n++)
         af_fill_silence((char *)data[n] + bytes, full_bytes - bytes, ao->format);
-
     return bytes / ao->sstride;
 }
-
 static int control(struct ao *ao, enum aocontrol cmd, void *arg)
 {
-    if (ao->driver->control)
-        return ao->driver->control(ao, cmd, arg);
+    if (ao->driver->control) return ao->driver->control(ao, cmd, arg);
     return CONTROL_UNKNOWN;
 }
-
 // Return size of the buffered data in seconds. Can include the device latency.
 // Basically, this returns how much data there is still to play, and how long
 // it takes until the last sample in the buffer reaches the speakers. This is
@@ -175,37 +148,29 @@ static int control(struct ao *ao, enum aocontrol cmd, void *arg)
 static double get_delay(struct ao *ao)
 {
     struct ao_pull_state *p = ao->api_priv;
-
     int64_t end = atomic_load(&p->end_time_us);
     int64_t now = mp_time_us();
     double driver_delay = MPMAX(0, (end - now) / (1000.0 * 1000.0));
     return mp_ring_buffered(p->buffers[0]) / (double)ao->bps + driver_delay;
 }
-
 static void reset(struct ao *ao)
 {
     struct ao_pull_state *p = ao->api_priv;
-    if (ao->driver->reset)
-        ao->driver->reset(ao); // assumes the audio callback thread is stopped
+    if (ao->driver->reset) ao->driver->reset(ao); // assumes the audio callback thread is stopped
     set_state(ao, AO_STATE_NONE);
-    for (int n = 0; n < ao->num_planes; n++)
-        mp_ring_reset(p->buffers[n]);
+    for (int n = 0; n < ao->num_planes; n++) mp_ring_reset(p->buffers[n]);
     atomic_store(&p->end_time_us, 0);
 }
-
 static void pause(struct ao *ao)
 {
-    if (ao->driver->reset)
-        ao->driver->reset(ao);
+    if (ao->driver->reset) ao->driver->reset(ao);
     set_state(ao, AO_STATE_NONE);
 }
-
 static void resume(struct ao *ao)
 {
     set_state(ao, AO_STATE_PLAY);
     ao->driver->resume(ao);
 }
-
 static bool get_eof(struct ao *ao)
 {
     struct ao_pull_state *p = ao->api_priv;
@@ -213,7 +178,6 @@ static bool get_eof(struct ao *ao)
     // extra thread to time it.
     return mp_ring_buffered(p->buffers[0]) == 0;
 }
-
 static void drain(struct ao *ao)
 {
     struct ao_pull_state *p = ao->api_priv;
@@ -226,17 +190,14 @@ static void drain(struct ao *ao)
         // callback, and an extra semaphore would require slightly more effort.)
         // Limit to arbitrary ~250ms max. waiting for robustness.
         int64_t max = mp_time_us() + 250000;
-        while (mp_time_us() < max && !get_eof(ao))
-            mp_sleep_us(1);
+        while (mp_time_us() < max && !get_eof(ao)) mp_sleep_us(1);
     }
     reset(ao);
 }
-
 static void uninit(struct ao *ao)
 {
     ao->driver->uninit(ao);
 }
-
 static int init(struct ao *ao)
 {
     struct ao_pull_state *p = ao->api_priv;
@@ -246,7 +207,6 @@ static int init(struct ao *ao)
     assert(ao->driver->resume);
     return 0;
 }
-
 const struct ao_driver ao_api_pull = {
     .init = init,
     .control = control,

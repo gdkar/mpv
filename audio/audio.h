@@ -25,6 +25,8 @@
 struct mp_audio {
     int samples;        // number of samples in data (per channel)
     void *planes[MP_NUM_CHANNELS]; // data buffer (one per plane)
+    double pts;
+    double duration;
     int rate;           // sample rate
     struct mp_chmap channels; // channel layout, use mp_audio_set_*() to set
     int format; // format (AF_FORMAT_...), use mp_audio_set_format() to set
@@ -36,14 +38,12 @@ struct mp_audio {
     int spf;            // sub-samples per sample on each plane
     int num_planes;     // number of planes
     int bps;            // size of sub-samples (af_fmt_to_bytes(format))
-
     // --- private
     // These do not necessarily map directly to planes[]. They can have
     // different order or count. There shouldn't be more buffers than planes.
     // If allocated[n] is NULL, allocated[n+1] must also be NULL.
     struct AVBufferRef *allocated[MP_NUM_CHANNELS];
 };
-
 void mp_audio_set_format(struct mp_audio *mpa, int format);
 void mp_audio_set_num_channels(struct mp_audio *mpa, int num_channels);
 void mp_audio_set_channels(struct mp_audio *mpa, const struct mp_chmap *chmap);
@@ -79,11 +79,7 @@ struct mp_audio *mp_audio_from_avframe(struct AVFrame *avframe);
 
 struct mp_audio_pool;
 struct mp_audio_pool *mp_audio_pool_create(void *ta_parent);
-struct mp_audio *mp_audio_pool_get(struct mp_audio_pool *pool,
-                                   const struct mp_audio *fmt, int samples);
-struct mp_audio *mp_audio_pool_new_copy(struct mp_audio_pool *pool,
-                                        struct mp_audio *frame);
-int mp_audio_pool_make_writeable(struct mp_audio_pool *pool,
-                                 struct mp_audio *frame);
-
+struct mp_audio *mp_audio_pool_get(struct mp_audio_pool *pool,const struct mp_audio *fmt, int samples);
+struct mp_audio *mp_audio_pool_new_copy(struct mp_audio_pool *pool,struct mp_audio *frame);
+int mp_audio_pool_make_writeable(struct mp_audio_pool *pool,struct mp_audio *frame);
 #endif

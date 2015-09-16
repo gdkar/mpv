@@ -146,42 +146,6 @@ static int best_overlap_offset_float(af_scaletempo_t *s)
     return best_off * 4 * s->num_channels;
 }
 
-static int best_overlap_offset_s16(af_scaletempo_t *s)
-{
-    int64_t best_corr = INT64_MIN;
-    int best_off = 0;
-
-    int32_t *pw  = s->table_window;
-    int16_t *po  = s->buf_overlap;
-    po += s->num_channels;
-    int32_t *ppc = s->buf_pre_corr;
-    for (long i = s->num_channels; i < s->samples_overlap; i++)
-        *ppc++ = (*pw++ **po++) >> 15;
-
-    int16_t *search_start = (int16_t *)s->buf_queue + s->num_channels;
-    for (int off = 0; off < s->frames_search; off++) {
-        int64_t corr = 0;
-        int16_t *ps = search_start;
-        ppc = s->buf_pre_corr;
-        ppc += s->samples_overlap - s->num_channels;
-        ps  += s->samples_overlap - s->num_channels;
-        long i  = -(s->samples_overlap - s->num_channels);
-        do {
-            corr += ppc[i + 0] * ps[i + 0];
-            corr += ppc[i + 1] * ps[i + 1];
-            corr += ppc[i + 2] * ps[i + 2];
-            corr += ppc[i + 3] * ps[i + 3];
-            i += 4;
-        } while (i < 0);
-        if (corr > best_corr) {
-            best_corr = corr;
-            best_off  = off;
-        }
-        search_start += s->num_channels;
-    }
-
-    return best_off * 2 * s->num_channels;
-}
 
 static void output_overlap_float(af_scaletempo_t *s, void *buf_out,
                                  int bytes_off)
@@ -192,19 +156,6 @@ static void output_overlap_float(af_scaletempo_t *s, void *buf_out,
     float *pin  = (float *)(s->buf_queue + bytes_off);
     for (int i = 0; i < s->samples_overlap; i++) {
         *pout++ = *po - *pb++ *(*po - *pin++);
-        po++;
-    }
-}
-
-static void output_overlap_s16(af_scaletempo_t *s, void *buf_out,
-                               int bytes_off)
-{
-    int16_t *pout = buf_out;
-    int32_t *pb   = s->table_blend;
-    int16_t *po   = s->buf_overlap;
-    int16_t *pin  = (int16_t *)(s->buf_queue + bytes_off);
-    for (int i = 0; i < s->samples_overlap; i++) {
-        *pout++ = *po - ((*pb++ *(*po - *pin++)) >> 16);
         po++;
     }
 }
@@ -226,8 +177,7 @@ static int filter(struct af_instance *af, struct mp_audio *data)
         talloc_free(data);
         return -1;
     }
-    if (data)
-        mp_audio_copy_attributes(out, data);
+    if (data) mp_audio_copy_attributes(out, data);
 
     int offset_in = fill_queue(af, data, 0);
     int8_t *pout = out->planes[0];
@@ -300,16 +250,11 @@ static int control(struct af_instance *af, int cmd, void *arg)
         struct mp_audio *data = (struct mp_audio *)arg;
         float srate  = data->rate / 1000.0;
         int nch = data->nch;
-        int use_int = 0;
-
+        
+        mp_audio_set_format(data,AF_FORMAT_FLOAT);
         mp_audio_force_interleaved_format(data);
         mp_audio_copy_config(af->data, data);
 
-        if (data->format == AF_FORMAT_S16) {
-            use_int = 1;
-        } else {
-            mp_audio_set_format(af->data, AF_FORMAT_FLOAT);
-        }
         int bps = af->data->bps;
 
         s->frames_stride        = srate * s->ms_stride;
@@ -336,67 +281,33 @@ static int control(struct af_instance *af, int cmd, void *arg)
                 return AF_ERROR;
             }
             memset(s->buf_overlap, 0, s->bytes_overlap);
-            if (use_int) {
-                int32_t *pb = s->table_blend;
-                int64_t blend = 0;
-                for (int i = 0; i < frames_overlap; i++) {
-                    int32_t v = blend / frames_overlap;
-                    for (int j = 0; j < nch; j++)
-                        *pb++ = v;
-                    blend += 65536; // 2^16
-                }
-                s->output_overlap = output_overlap_s16;
-            } else {
-                float *pb = s->table_blend;
-                for (int i = 0; i < frames_overlap; i++) {
-                    float v = i / (float)frames_overlap;
-                    for (int j = 0; j < nch; j++)
-                        *pb++ = v;
-                }
-                s->output_overlap = output_overlap_float;
+            float *pb = s->table_blend;
+            for (int i = 0; i < frames_overlap; i++) {
+                float v = i / (float)frames_overlap;
+                for (int j = 0; j < nch; j++)
+                    *pb++ = v;
             }
+            s->output_overlap = output_overlap_float;
         }
 
         s->frames_search = (frames_overlap > 1) ? srate * s->ms_search : 0;
         if (s->frames_search <= 0)
             s->best_overlap_offset = NULL;
         else {
-            if (use_int) {
-                int64_t t = frames_overlap;
-                int32_t n = 8589934588LL / (t * t); // 4 * (2^31 - 1) / t^2
-                s->buf_pre_corr = realloc(s->buf_pre_corr,
-                                          s->bytes_overlap * 2 + UNROLL_PADDING);
-                s->table_window = realloc(s->table_window,
-                                          s->bytes_overlap * 2 - nch * bps * 2);
-                if (!s->buf_pre_corr || !s->table_window) {
-                    MP_FATAL(af, "Out of memory\n");
-                    return AF_ERROR;
-                }
-                memset((char *)s->buf_pre_corr + s->bytes_overlap * 2, 0,
-                       UNROLL_PADDING);
-                int32_t *pw = s->table_window;
-                for (int i = 1; i < frames_overlap; i++) {
-                    int32_t v = (i * (t - i) * n) >> 15;
-                    for (int j = 0; j < nch; j++)
-                        *pw++ = v;
-                }
-                s->best_overlap_offset = best_overlap_offset_s16;
-            } else {
-                s->buf_pre_corr = realloc(s->buf_pre_corr, s->bytes_overlap);
-                s->table_window = realloc(s->table_window,
-                                          s->bytes_overlap - nch * bps);
-                if (!s->buf_pre_corr || !s->table_window) {
-                    MP_FATAL(af, "Out of memory\n");
-                    return AF_ERROR;
-                }
-                float *pw = s->table_window;
-                for (int i = 1; i < frames_overlap; i++) {
-                    float v = i * (frames_overlap - i);
-                    for (int j = 0; j < nch; j++)
-                        *pw++ = v;
-                }
-                s->best_overlap_offset = best_overlap_offset_float;
-            }
+              s->buf_pre_corr = realloc(s->buf_pre_corr, s->bytes_overlap);
+              s->table_window = realloc(s->table_window,
+                                        s->bytes_overlap - nch * bps);
+              if (!s->buf_pre_corr || !s->table_window) {
+                  MP_FATAL(af, "Out of memory\n");
+                  return AF_ERROR;
+              }
+              float *pw = s->table_window;
+              for (int i = 1; i < frames_overlap; i++) {
+                  float v = i * (frames_overlap - i);
+                  for (int j = 0; j < nch; j++)
+                      *pw++ = v;
+              }
+              s->best_overlap_offset = best_overlap_offset_float;
         }
 
         s->bytes_per_frame = bps * nch;
@@ -409,10 +320,8 @@ static int control(struct af_instance *af, int cmd, void *arg)
             MP_FATAL(af, "Out of memory\n");
             return AF_ERROR;
         }
-
-        s->bytes_queued = 0;
-        s->bytes_to_slide = 0;
-
+/*        s->bytes_queued = 0;   */
+/*        s->bytes_to_slide = 0; */
         MP_DBG(af, ""
                "%.2f stride_in, %i stride_out, %i standing, "
                "%i overlap, %i search, %i queue, %s mode\n",
@@ -422,15 +331,14 @@ static int control(struct af_instance *af, int cmd, void *arg)
                (int)(s->bytes_overlap / nch / bps),
                s->frames_search,
                (int)(s->bytes_queue / nch / bps),
-               (use_int ? "s16" : "float"));
+               ( "float"));
 
         return af_test_output(af, (struct mp_audio *)arg);
     }
     case AF_CONTROL_SET_PLAYBACK_SPEED: {
         double speed = *(double *)arg;
         if (s->speed_opt & SCALE_TEMPO) {
-            if (s->speed_opt & SCALE_PITCH)
-                break;
+            if (s->speed_opt & SCALE_PITCH) break;
             update_speed(af, speed);
         } else if (s->speed_opt & SCALE_PITCH) {
             update_speed(af, speed);

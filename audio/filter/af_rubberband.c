@@ -94,17 +94,13 @@ static int control(struct af_instance *af, int cmd, void *arg)
 static int filter_frame(struct af_instance *af, struct mp_audio *data)
 {
     struct priv *p = af->priv;
-
     talloc_free(p->pending);
     p->pending = data;
-
     return 0;
 }
-
 static int filter_out(struct af_instance *af)
 {
     struct priv *p = af->priv;
-
     while (rubberband_available(p->rubber) <= 0) {
         const float *dummy[MP_NUM_CHANNELS] = {0};
         const float **in_data = dummy;
@@ -112,19 +108,16 @@ static int filter_out(struct af_instance *af)
         if (p->pending) {
             if (!p->pending->samples)
                 break;
-
             // recover from previous EOF
             if (p->needs_reset) {
                 rubberband_reset(p->rubber);
                 p->rubber_delay = 0;
             }
             p->needs_reset = false;
-
             size_t needs = rubberband_get_samples_required(p->rubber);
             in_data = (void *)&p->pending->planes;
             in_samples = MPMIN(p->pending->samples, needs);
         }
-
         if (p->needs_reset)
             break; // previous EOF
         p->needs_reset = !p->pending; // EOF
@@ -136,7 +129,6 @@ static int filter_out(struct af_instance *af)
             break;
         mp_audio_skip_samples(p->pending, in_samples);
     }
-
     int out_samples = rubberband_available(p->rubber);
     if (out_samples > 0) {
         struct mp_audio *out =
@@ -145,14 +137,12 @@ static int filter_out(struct af_instance *af)
             return -1;
         if (p->pending)
             mp_audio_copy_config(out, p->pending);
-
         float **out_data = (void *)&out->planes;
         out->samples = rubberband_retrieve(p->rubber, out_data, out->samples);
         p->rubber_delay -= out->samples * p->speed;
 
         af_add_output_frame(af, out);
     }
-
     int delay_samples = p->rubber_delay;
     if (p->pending)
         delay_samples += p->pending->samples;

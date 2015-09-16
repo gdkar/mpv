@@ -48,19 +48,14 @@ struct ao {
     // from an entry from the list returned by driver->list_devices. If the
     // default device should be used, this is set to NULL.
     char *device;
-
     // Device actually chosen by the AO
     char *detected_device;
-
     // Application name to report to the audio API.
     char *client_name;
-
     // Used during init: if init fails, redirect to this ao
     char *redirect;
-
     // Internal events (use ao_request_reload(), ao_hotplug_event())
     atomic_int events_;
-
     int buffer;
     double def_buffer;
     void *api_priv;
@@ -157,7 +152,6 @@ struct ao_driver {
     int (*wait)(struct ao *ao, pthread_mutex_t *lock);
     // In combination with wait(). Lock may or may not be held.
     void (*wakeup)(struct ao *ao);
-
     // Return the list of devices currently available in the system. Use
     // ao_device_list_add() to add entries. The selected device will be set as
     // ao->device (using ao_device_desc.name).
@@ -166,37 +160,26 @@ struct ao_driver {
     //          callbacks are not set, no driver initialization call is done
     //          on the ao struct.
     void (*list_devs)(struct ao *ao, struct ao_device_list *list);
-
     // If set, these are called before/after ao_driver->list_devs is called.
     // It is also assumed that the driver can do hotplugging - which means
     // it is expected to call ao_hotplug_event(ao) whenever the system's
     // audio device list changes. The player will then call list_devs() again.
     int (*hotplug_init)(struct ao *ao);
     void (*hotplug_uninit)(struct ao *ao);
-
     // For option parsing (see vo.h)
     int priv_size;
     const void *priv_defaults;
     const struct m_option *options;
 };
-
 // These functions can be called by AOs.
-
 int ao_play_silence(struct ao *ao, int samples);
 int ao_read_data(struct ao *ao, void **data, int samples, int64_t out_time_us);
 struct pollfd;
-int ao_wait_poll(struct ao *ao, struct pollfd *fds, int num_fds,
-                 pthread_mutex_t *lock);
+int ao_wait_poll(struct ao *ao, struct pollfd *fds, int num_fds,pthread_mutex_t *lock);
 void ao_wakeup_poll(struct ao *ao);
-
-bool ao_chmap_sel_adjust(struct ao *ao, const struct mp_chmap_sel *s,
-                         struct mp_chmap *map);
-bool ao_chmap_sel_get_def(struct ao *ao, const struct mp_chmap_sel *s,
-                          struct mp_chmap *map, int num);
-
+bool ao_chmap_sel_adjust(struct ao *ao, const struct mp_chmap_sel *s,struct mp_chmap *map);
+bool ao_chmap_sel_get_def(struct ao *ao, const struct mp_chmap_sel *s,struct mp_chmap *map, int num);
 // Add a deep copy of e to the list.
 // Call from ao_driver->list_devs callback only.
-void ao_device_list_add(struct ao_device_list *list, struct ao *ao,
-                        struct ao_device_desc *e);
-
+void ao_device_list_add(struct ao_device_list *list, struct ao *ao,struct ao_device_desc *e);
 #endif

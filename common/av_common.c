@@ -148,45 +148,37 @@ void mp_add_lavc_decoders(struct mp_decoder_list *list, enum AVMediaType type)
     AVCodec *cur = NULL;
     for (;;) {
         cur = av_codec_next(cur);
-        if (!cur)
-            break;
+        if (!cur) break;
         if (av_codec_is_decoder(cur) && cur->type == type) {
             mp_add_decoder(list, "lavc", mp_codec_from_av_codec_id(cur->id),
                            cur->name, cur->long_name);
         }
     }
 }
-
 int mp_codec_to_av_codec_id(const char *codec)
 {
     int id = AV_CODEC_ID_NONE;
     if (codec) {
         const AVCodecDescriptor *desc = avcodec_descriptor_get_by_name(codec);
-        if (desc)
-            id = desc->id;
+        if (desc) id = desc->id;
         if (id == AV_CODEC_ID_NONE) {
             AVCodec *avcodec = avcodec_find_decoder_by_name(codec);
-            if (avcodec)
-                id = avcodec->id;
+            if (avcodec) id = avcodec->id;
         }
     }
     return id;
 }
-
 const char *mp_codec_from_av_codec_id(int codec_id)
 {
     const char *name = NULL;
     const AVCodecDescriptor *desc = avcodec_descriptor_get(codec_id);
-    if (desc)
-        name = desc->name;
+    if (desc) name = desc->name;
     if (!name) {
         AVCodec *avcodec = avcodec_find_decoder(codec_id);
-        if (avcodec)
-            name = avcodec->name;
+        if (avcodec) name = avcodec->name;
     }
     return name;
 }
-
 // kv is in the format as by OPT_KEYVALUELIST(): kv[0]=key0, kv[1]=val0, ...
 // Copy them to the dict.
 void mp_set_avdict(AVDictionary **dict, char **kv)
@@ -194,7 +186,6 @@ void mp_set_avdict(AVDictionary **dict, char **kv)
     for (int n = 0; kv && kv[n * 2]; n++)
         av_dict_set(dict, kv[n * 2 + 0], kv[n * 2 + 1], 0);
 }
-
 // For use with libav* APIs that take AVDictionaries of options.
 // Print options remaining in the dict as unset.
 void mp_avdict_print_unset(struct mp_log *log, int msgl, AVDictionary *dict)

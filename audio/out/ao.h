@@ -44,33 +44,27 @@ enum aocontrol {
 // If set, then the queued audio data is the last. Note that after a while, new
 // data might be written again, instead of closing the AO.
 #define AOPLAY_FINAL_CHUNK 1
-
 enum {
     AO_EVENT_RELOAD = 1,
     AO_EVENT_HOTPLUG = 2,
 };
-
 typedef struct ao_control_vol {
     float left;
     float right;
 } ao_control_vol_t;
-
 struct ao_device_desc {
     const char *name;   // symbolic name; will be set on ao->device
     const char *desc;   // verbose human readable name
 };
-
 struct ao_device_list {
     struct ao_device_desc *devices;
     int num_devices;
 };
-
 struct ao;
 struct mpv_global;
 struct input_ctx;
 struct encode_lavc_context;
 struct mp_audio;
-
 struct ao *ao_init_best(struct mpv_global *global,
                         struct input_ctx *input_ctx,
                         struct encode_lavc_context *encode_lavc_ctx,
@@ -100,7 +94,5 @@ void ao_hotplug_destroy(struct ao_hotplug *hp);
 bool ao_hotplug_check_update(struct ao_hotplug *hp);
 const char *ao_hotplug_get_detected_device(struct ao_hotplug *hp);
 struct ao_device_list *ao_hotplug_get_device_list(struct ao_hotplug *hp);
-
 void ao_print_devices(struct mpv_global *global, struct mp_log *log);
-
 #endif /* MPLAYER_AUDIO_OUT_H */
